@@ -39,102 +39,121 @@
         <button id="logout-btn">Logout</button>
     </div>
 
-    <script>
-        const SUPABASE_URL = 'https://egihrxkhxbvfhayjekec.supabase.co'; // <-- From Supabase Settings > API
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVnaWhyeGtoeGJ2ZmhheWpla2VjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MTM5OTEsImV4cCI6MjA2OTk4OTk5MX0.Z6qv9nFH4v297KicI2EfpeePEiUcN_u4GnAuxcMY650'; // <-- From Supabase Settings > API
+   <script>
+    const SUPABASE_URL = 'YOUR_SUPABASE_URL'; // <-- Make sure this is still correct
+    const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY'; // <-- Make sure this is still correct
 
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    // FIX: The Supabase library is called 'supabase', so we name our client 'supabaseClient'
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        const loginSection = document.getElementById('login-section');
-        const adminSection = document.getElementById('admin-section');
-        const loginBtn = document.getElementById('login-btn');
-        const logoutBtn = document.getElementById('logout-btn');
-        const addPartBtn = document.getElementById('add-part-btn');
+    const loginSection = document.getElementById('login-section');
+    const adminSection = document.getElementById('admin-section');
+    const loginBtn = document.getElementById('login-btn');
+    const logoutBtn = document.getElementById('logout-btn');
+    const addPartBtn = document.getElementById('add-part-btn');
 
-        // --- AUTHENTICATION ---
-        loginBtn.onclick = async () => {
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            const { error } = await supabase.auth.signInWithPassword({ email, password });
-            if (error) {
-                alert('Login failed: ' + error.message);
-            } else {
-                alert('Login successful!');
-                checkUser();
-            }
-        };
-
-        logoutBtn.onclick = async () => {
-            await supabase.auth.signOut();
+    // --- AUTHENTICATION ---
+    loginBtn.onclick = async () => {
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        // FIX: Use 'supabaseClient'
+        const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+        if (error) {
+            alert('Login failed: ' + error.message);
+        } else {
+            alert('Login successful!');
             checkUser();
-        };
+        }
+    };
 
-        const checkUser = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session) {
-                loginSection.style.display = 'none';
-                adminSection.style.display = 'block';
-            } else {
-                loginSection.style.display = 'block';
-                adminSection.style.display = 'none';
-            }
-        };
-
-        // --- PART MANAGEMENT ---
-        addPartBtn.onclick = async () => {
-            const name = document.getElementById('part-name').value;
-            const part_number = document.getElementById('part-number').value;
-            const description = document.getElementById('part-description').value;
-            const price = document.getElementById('part-price').value;
-            const stock_quantity = document.getElementById('part-stock').value;
-            const imageFile = document.getElementById('part-image').files[0];
-
-            if (!name || !price || !imageFile) {
-                alert('Name, Price, and Image are required.');
-                return;
-            }
-
-            // 1. Upload the image
-            const fileExt = imageFile.name.split('.').pop();
-            const fileName = `${Date.now()}.${fileExt}`;
-            const filePath = `${fileName}`;
-            
-            let { error: uploadError } = await supabase.storage
-                .from('part-images')
-                .upload(filePath, imageFile);
-
-            if (uploadError) {
-                alert('Error uploading image: ' + uploadError.message);
-                return;
-            }
-
-            // 2. Get the public URL of the uploaded image
-            const { data: { publicUrl } } = supabase.storage
-                .from('part-images')
-                .getPublicUrl(filePath);
-
-            // 3. Insert the part data into the database
-            const { error: insertError } = await supabase
-                .from('parts')
-                .insert([{
-                    name: name,
-                    part_number: part_number,
-                    description: description,
-                    price: parseFloat(price),
-                    stock_quantity: parseInt(stock_quantity),
-                    image_url: publicUrl
-                }]);
-            
-            if (insertError) {
-                alert('Error adding part: ' + insertError.message);
-            } else {
-                alert('Part added successfully!');
-                document.getElementById('admin-section').querySelector('form').reset(); // Reset form
-            }
-        };
-
-        // Check user status on page load
+    logoutBtn.onclick = async () => {
+        // FIX: Use 'supabaseClient'
+        await supabaseClient.auth.signOut();
         checkUser();
-    </script>
-</body>
-</html>
+    };
+
+    const checkUser = async () => {
+        // FIX: Use 'supabaseClient'
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (session) {
+            loginSection.style.display = 'none';
+            adminSection.style.display = 'block';
+        } else {
+            loginSection.style.display = 'block';
+            adminSection.style.display = 'none';
+        }
+    };
+
+    // --- PART MANAGEMENT ---
+    addPartBtn.onclick = async () => {
+        const name = document.getElementById('part-name').value;
+        const part_number = document.getElementById('part-number').value;
+        const description = document.getElementById('part-description').value;
+        const price = document.getElementById('part-price').value;
+        const stock_quantity = document.getElementById('part-stock').value;
+        const imageFile = document.getElementById('part-image').files[0];
+
+        if (!name || !price || !imageFile) {
+            alert('Name, Price, and Image are required.');
+            return;
+        }
+
+        addPartBtn.disabled = true;
+        addPartBtn.textContent = 'Uploading...';
+
+        // 1. Upload the image
+        const fileExt = imageFile.name.split('.').pop();
+        const fileName = `${Date.now()}.${fileExt}`;
+        const filePath = `${fileName}`;
+        
+        // FIX: Use 'supabaseClient'
+        let { error: uploadError } = await supabaseClient.storage
+            .from('part-images')
+            .upload(filePath, imageFile);
+
+        if (uploadError) {
+            alert('Error uploading image: ' + uploadError.message);
+            addPartBtn.disabled = false;
+            addPartBtn.textContent = 'Add Part';
+            return;
+        }
+
+        // 2. Get the public URL of the uploaded image
+        // FIX: Use 'supabaseClient'
+        const { data: urlData } = supabaseClient.storage
+            .from('part-images')
+            .getPublicUrl(filePath);
+
+        // 3. Insert the part data into the database
+        // FIX: Use 'supabaseClient'
+        const { error: insertError } = await supabaseClient
+            .from('parts')
+            .insert([{
+                name: name,
+                part_number: part_number,
+                description: description,
+                price: parseFloat(price),
+                stock_quantity: parseInt(stock_quantity),
+                image_url: urlData.publicUrl
+            }]);
+        
+        if (insertError) {
+            alert('Error adding part: ' + insertError.message);
+        } else {
+            alert('Part added successfully!');
+            // Reset form fields
+            document.getElementById('part-name').value = '';
+            document.getElementById('part-number').value = '';
+            document.getElementById('part-description').value = '';
+            document.getElementById('part-price').value = '';
+            document.getElementById('part-stock').value = '';
+            document.getElementById('part-image').value = null;
+        }
+
+        addPartBtn.disabled = false;
+        addPartBtn.textContent = 'Add Part';
+    };
+
+    // Check user status on page load
+    checkUser();
+</script>
