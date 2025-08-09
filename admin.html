@@ -6,23 +6,16 @@
     <title>Parts Admin Panel</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"; max-width: 960px; margin: 2rem auto; background-color: #1a1a1a; color: #eee; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; max-width: 960px; margin: 2rem auto; background-color: #1a1a1a; color: #eee; }
         h1, h2 { border-bottom: 1px solid #444; padding-bottom: 10px; }
-        input, textarea { width: 100%; padding: 10px; margin-bottom: 12px; box-sizing: border-box; background-color: #333; color: #eee; border: 1px solid #555; border-radius: 4px; font-size: 1em; }
-        button { padding: 10px 15px; cursor: pointer; border: none; border-radius: 4px; font-size: 1em; background-color: #5a67d8; color: white; }
+        input, textarea, button { width: 100%; padding: 10px; margin-bottom: 12px; box-sizing: border-box; background-color: #333; color: #eee; border: 1px solid #555; border-radius: 4px; font-size: 1em; }
+        button { cursor: pointer; background-color: #5a67d8; font-weight: bold; }
         button:hover { background-color: #4c58b5; }
-        #logout-btn, .delete-btn { background-color: #c53030; }
-        #logout-btn:hover, .delete-btn:hover { background-color: #9b2c2c; }
-        .edit-btn { background-color: #2c5282; }
-        .edit-btn:hover { background-color: #2a4365; }
+        button:disabled { background-color: #4a5568; cursor: not-allowed; }
+        #logout-btn { background-color: #c53030; }
+        #logout-btn:hover { background-color: #9b2c2c; }
         #login-section, #admin-section { border: 1px solid #444; padding: 20px; margin-top: 20px; border-radius: 8px; background-color: #2d2d2d; }
         #admin-section { display: none; }
-        #parts-list-container { margin-top: 40px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { padding: 12px; border: 1px solid #444; text-align: left; }
-        th { background-color: #373737; }
-        td.actions { width: 120px; text-align: center; }
-        td.actions button { margin: 2px; }
     </style>
 </head>
 <body>
@@ -38,55 +31,30 @@
 
     <div id="admin-section">
         <form id="part-form">
-            <h2>Add / Edit Part</h2>
-            <input type="hidden" id="part-id">
+            <h2>Add New Part</h2>
             <input type="text" id="part-name" placeholder="Part Name" required>
             <input type="text" id="part-number" placeholder="Part Number">
             <textarea id="part-description" placeholder="Description"></textarea>
             <input type="number" id="part-price" placeholder="Price" step="0.01" required>
             <input type="number" id="part-stock" placeholder="Stock Quantity">
-            <label for="part-image">Part Image (only required when adding a new part):</label>
-            <input type="file" id="part-image" accept="image/*">
+            <label for="part-images">Part Images (select one or more):</label>
+            <input type="file" id="part-images" accept="image/*" multiple required>
             <button type="submit" id="submit-btn">Add Part</button>
         </form>
         <hr style="border-color: #444; margin: 20px 0;">
         <button id="logout-btn">Logout</button>
-        
-        <div id="parts-list-container">
-            <h2>Existing Parts</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Part #</th>
-                        <th>Price</th>
-                        <th>Stock</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="parts-table-body">
-                    <tr><td colspan="5" style="text-align:center;">Loading parts...</td></tr>
-                </tbody>
-            </table>
-        </div>
     </div>
 
     <script>
-        const SUPABASE_URL = 'https://egihrxkhxbvfhayjekec.supabase.co'; // <-- Make sure these are correct
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVnaWhyeGtoeGJ2ZmhheWpla2VjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MTM5OTEsImV4cCI6MjA2OTk4OTk5MX0.Z6qv9nFH4v297KicI2EfpeePEiUcN_u4GnAuxcMY650'; // <-- Make sure these are correct
-
+        const SUPABASE_URL = 'https://egihrxkhxbvfhayjekec.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVnaWhyeGtoeGJ2ZmhheWpla2VjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MTM5OTEsImV4cCI6MjA2OTk4OTk5MX0.Z6qv9nFH4v297KicI2EfpeePEiUcN_u4GnAuxcMY650';
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        // Page Elements
         const loginSection = document.getElementById('login-section');
         const adminSection = document.getElementById('admin-section');
-        const logoutBtn = document.getElementById('logout-btn');
         const partForm = document.getElementById('part-form');
-        const partsTableBody = document.getElementById('parts-table-body');
         const submitBtn = document.getElementById('submit-btn');
-        const partIdInput = document.getElementById('part-id');
 
-        // --- AUTHENTICATION ---
         document.getElementById('login-btn').onclick = async () => {
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
@@ -94,102 +62,18 @@
             if (error) alert('Login failed: ' + error.message);
         };
 
-        logoutBtn.onclick = async () => {
-            await supabaseClient.auth.signOut();
-        };
+        document.getElementById('logout-btn').onclick = () => supabaseClient.auth.signOut();
 
-        // --- CORE LOGIC ---
         const checkUser = async () => {
             const { data: { session } } = await supabaseClient.auth.getSession();
-            if (session) {
-                loginSection.style.display = 'none';
-                adminSection.style.display = 'block';
-                loadParts(); // Load parts after user is confirmed
-            } else {
-                loginSection.style.display = 'block';
-                adminSection.style.display = 'none';
-            }
+            loginSection.style.display = session ? 'none' : 'block';
+            adminSection.style.display = session ? 'block' : 'none';
         };
 
-        supabaseClient.auth.onAuthStateChange((event, session) => {
-            checkUser();
-        });
+        supabaseClient.auth.onAuthStateChange(checkUser);
 
-        // --- LOAD PARTS ---
-        const loadParts = async () => {
-            partsTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Loading parts...</td></tr>';
-            
-            const { data: parts, error } = await supabaseClient
-                .from('parts')
-                .select('*')
-                .order('name', { ascending: true });
-
-            if (error) {
-                partsTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:red;">Error loading parts.</td></tr>';
-                console.error('Error loading parts:', error);
-                return;
-            }
-
-            partsTableBody.innerHTML = ''; // Clear the table
-            if (parts.length === 0) {
-                 partsTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No parts found. Add one above!</td></tr>';
-            } else {
-                parts.forEach(part => {
-                    const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td>${part.name}</td>
-                        <td>${part.part_number || 'N/A'}</td>
-                        <td>$${Number(part.price).toFixed(2)}</td>
-                        <td>${part.stock_quantity}</td>
-                        <td class="actions">
-                            <button class="edit-btn">Edit</button>
-                            <button class="delete-btn">Delete</button>
-                        </td>
-                    `;
-                    
-                    // Add event listeners for the new buttons
-                    row.querySelector('.edit-btn').addEventListener('click', () => populateFormForEdit(part));
-                    row.querySelector('.delete-btn').addEventListener('click', () => deletePart(part.id, part.name));
-
-                    partsTableBody.appendChild(row);
-                });
-            }
-        };
-
-        // --- EDIT AND DELETE ---
-        const populateFormForEdit = (part) => {
-            partIdInput.value = part.id;
-            document.getElementById('part-name').value = part.name;
-            document.getElementById('part-number').value = part.part_number;
-            document.getElementById('part-description').value = part.description;
-            document.getElementById('part-price').value = part.price;
-            document.getElementById('part-stock').value = part.stock_quantity;
-            
-            submitBtn.textContent = 'Save Changes';
-            window.scrollTo(0, 0); // Scroll to top to see the form
-        };
-
-        const deletePart = async (id, name) => {
-            if (!confirm(`Are you sure you want to delete "${name}"? This cannot be undone.`)) {
-                return;
-            }
-            
-            const { error } = await supabaseClient
-                .from('parts')
-                .delete()
-                .eq('id', id);
-
-            if (error) {
-                alert('Error deleting part: ' + error.message);
-            } else {
-                alert('Part deleted successfully.');
-                loadParts(); // Refresh the list
-            }
-        };
-
-        // --- FORM SUBMISSION (Handles both ADD and UPDATE) ---
         partForm.onsubmit = async (e) => {
-            e.preventDefault(); // Prevent default form submission
+            e.preventDefault();
             
             const partData = {
                 name: document.getElementById('part-name').value,
@@ -199,58 +83,64 @@
                 stock_quantity: parseInt(document.getElementById('part-stock').value),
             };
 
-            const imageFile = document.getElementById('part-image').files[0];
-            const partId = partIdInput.value;
-            let formError = null;
+            const imageFiles = document.getElementById('part-images').files;
+            if (imageFiles.length === 0) {
+                alert('You must select at least one image.');
+                return;
+            }
 
             submitBtn.disabled = true;
             submitBtn.textContent = 'Saving...';
 
-            if (partId) { // ---- UPDATE LOGIC ----
-                const { error } = await supabaseClient
-                    .from('parts')
-                    .update(partData)
-                    .eq('id', partId);
-                formError = error;
+            const { data: newPart, error: partError } = await supabaseClient
+                .from('parts')
+                .insert(partData)
+                .select()
+                .single();
 
-            } else { // ---- ADD LOGIC ----
-                if (!imageFile) {
-                    alert('An image is required when adding a new part.');
-                    submitBtn.disabled = false;
-                    submitBtn.textContent = 'Add Part';
-                    return;
-                }
-                
-                // 1. Upload image
-                const fileExt = imageFile.name.split('.').pop();
-                const fileName = `${Date.now()}.${fileExt}`;
-                const { error: uploadError } = await supabaseClient.storage.from('part-images').upload(fileName, imageFile);
-
-                if (uploadError) {
-                    formError = uploadError;
-                } else {
-                    // 2. Get public URL
-                    const { data: urlData } = supabaseClient.storage.from('part-images').getPublicUrl(fileName);
-                    partData.image_url = urlData.publicUrl;
-
-                    // 3. Insert into database
-                    const { error: insertError } = await supabaseClient.from('parts').insert([partData]);
-                    formError = insertError;
-                }
+            if (partError) {
+                alert('Error saving part data: ' + partError.message);
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Add Part';
+                return;
             }
 
-            // --- Post-submission ---
-            if (formError) {
-                alert('Error saving part: ' + formError.message);
-            } else {
-                alert(`Part ${partId ? 'updated' : 'added'} successfully!`);
-                partForm.reset();
-                partIdInput.value = ''; // Clear the hidden ID
-            }
+            const uploadPromises = Array.from(imageFiles).map(file => {
+                const fileName = `${newPart.id}-${Date.now()}-${file.name}`;
+                return supabaseClient.storage.from('part-images').upload(fileName, file);
+            });
+
+            const uploadResults = await Promise.all(uploadPromises);
             
+            const uploadError = uploadResults.find(result => result.error);
+            if (uploadError) {
+                alert('Error uploading images: ' + uploadError.error.message);
+                // Note: This leaves an "orphan" part. More advanced logic could delete it.
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Add Part';
+                return;
+            }
+
+            const imageRecords = uploadResults.map((result, i) => {
+                const { data } = supabaseClient.storage.from('part-images').getPublicUrl(result.data.path);
+                return {
+                    part_id: newPart.id,
+                    image_url: data.publicUrl,
+                    display_order: i
+                };
+            });
+
+            const { error: imageDbError } = await supabaseClient.from('part_images').insert(imageRecords);
+
+            if (imageDbError) {
+                alert('Error saving image records: ' + imageDbError.message);
+            } else {
+                alert('Part and images added successfully!');
+                partForm.reset();
+            }
+
             submitBtn.disabled = false;
-            submitBtn.textContent = partIdInput.value ? 'Save Changes' : 'Add Part';
-            loadParts(); // Refresh the list
+            submitBtn.textContent = 'Add Part';
         };
     </script>
 </body>
