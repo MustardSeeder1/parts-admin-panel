@@ -6,7 +6,6 @@
     <title>Parts Admin Panel</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        /* All previous styles remain the same */
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; max-width: 960px; margin: 2rem auto; background-color: #1a1a1a; color: #eee; }
         h1, h2, h3 { border-bottom: 1px solid #444; padding-bottom: 10px; }
         label { display: block; margin-bottom: 5px; color: #bbb; }
@@ -16,9 +15,18 @@
         button:disabled { background-color: #4a5568; cursor: not-allowed; }
         #logout-btn, .delete-btn { background-color: #c53030; }
         .edit-btn { background-color: #2c5282; margin-right: 5px;}
+        #login-section, #admin-section { border: 1px solid #444; padding: 20px; margin-top: 20px; border-radius: 8px; background-color: #2d2d2d; }
+        #admin-section { display: none; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; border: 1px solid #444; text-align: left; }
+        td.actions { width: 150px; }
+        #current-images-wrapper { border: 1px solid #444; padding: 15px; margin-bottom: 20px; border-radius: 4px; }
+        #current-images-container { display: flex; flex-wrap: wrap; gap: 10px; }
+        #current-images-container img { width: 100px; height: 100px; object-fit: cover; border-radius: 4px; }
     </style>
 </head>
 <body>
+
     <h1>Parts Admin Panel</h1>
 
     <div id="login-section">
@@ -29,6 +37,10 @@
     </div>
 
     <div id="admin-section">
+        <div id="current-images-wrapper" style="display: none;">
+            <h3>Current Images</h3>
+            <div id="current-images-container"></div>
+        </div>
         <form id="part-form">
             <h2 id="form-title">Add New Part</h2>
             <input type="hidden" id="part-id">
@@ -44,44 +56,75 @@
             <button type="submit" id="submit-btn">Add Part</button>
             <button type="button" id="cancel-edit-btn" style="display: none; background-color: #6a717e;">Cancel Edit</button>
         </form>
+        <hr style="border-color: #444; margin: 20px 0;">
+        <div id="parts-list-container">
+            <h2>Existing Parts</h2>
+            <table>
+                <thead><tr><th>Name</th><th>Part #</th><th>Price</th><th>Stock</th><th>Actions</th></tr></thead>
+                <tbody id="parts-table-body"></tbody>
+            </table>
         </div>
+        <hr style="border-color: #444; margin: 20px 0;">
+        <button id="logout-btn">Logout</button>
+    </div>
 
     <script>
-        // --- CONFIGURATION ---
-        const SUPABASE_URL = 'YOUR_SUPABASE_URL';
-        const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+        const SUPABASE_URL = 'https://egihrxkhxbvfhayjekec.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVnaWhyeGtoeGJ2ZmhheWpla2VjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MTM5OTEsImV4cCI6MjA2OTk4OTk5MX0.Z6qv9nFH4v297KicI2EfpeePEiUcN_u4GnAuxcMY650';
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        // --- All other element selectors and functions (login, logout, checkUser, etc.) ---
+        const loginSection = document.getElementById('login-section');
+        const adminSection = document.getElementById('admin-section');
         const partForm = document.getElementById('part-form');
         const submitBtn = document.getElementById('submit-btn');
+        const partsTableBody = document.getElementById('parts-table-body');
+        const formTitle = document.getElementById('form-title');
+        const partIdInput = document.getElementById('part-id');
+        const partImagesInput = document.getElementById('part-images');
+        const partImagesLabel = document.getElementById('part-images-label');
+        const cancelEditBtn = document.getElementById('cancel-edit-btn');
+        const squarespaceUrlInput = document.getElementById('squarespace-url');
+        const currentImagesWrapper = document.getElementById('current-images-wrapper');
+        const currentImagesContainer = document.getElementById('current-images-container');
 
-        partForm.onsubmit = async (e) => {
-            e.preventDefault();
-            submitBtn.disabled = true;
-            const partId = partIdInput.value;
-            const priceValue = document.getElementById('part-price').value;
-
-            const partData = {
-                name: document.getElementById('part-name').value,
-                part_number: document.getElementById('part-number').value,
-                description: document.getElementById('part-description').value,
-                price: priceValue ? parseFloat(priceValue) : null, // Handle blank price
-                stock_quantity: parseInt(document.getElementById('part-stock').value),
-                squarespace_product_url: document.getElementById('squarespace-url').value
-            };
-            
-            // The rest of the ADD/UPDATE logic remains the same
-            if (partId) {
-                // UPDATE logic
-            } else {
-                // ADD logic
-            }
-
-            submitBtn.disabled = false;
-            loadParts();
+        document.getElementById('login-btn').onclick = async () => {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+            if (error) alert('Login failed: ' + error.message);
         };
-        // --- Include all the other JS functions from the complete admin file ---
-    </script>
-</body>
-</html>
+
+        document.getElementById('logout-btn').onclick = () => supabaseClient.auth.signOut();
+        
+        const checkUser = (session) => {
+            loginSection.style.display = session ? 'none' : 'block';
+            adminSection.style.display = session ? 'block' : 'none';
+            if (session) {
+                loadParts();
+            }
+        };
+
+        supabaseClient.auth.onAuthStateChange((event, session) => checkUser(session));
+
+        const loadParts = async () => {
+            partsTableBody.innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
+            const { data, error } = await supabaseClient.from('parts').select('*').order('name');
+            if (error) { partsTableBody.innerHTML = '<tr><td colspan="5">Error loading parts.</td></tr>'; return; }
+            partsTableBody.innerHTML = '';
+            data.forEach(part => {
+                const row = partsTableBody.insertRow();
+                row.innerHTML = `
+                    <td>${part.name}</td><td>${part.part_number || ''}</td>
+                    <td>${part.price || 'N/A'}</td><td>${part.stock_quantity}</td>
+                    <td class="actions"><button class="edit-btn">Edit</button><button class="delete-btn">Delete</button></td>`;
+                row.querySelector('.edit-btn').onclick = () => populateFormForEdit(part);
+                row.querySelector('.delete-btn').onclick = () => deletePart(part.id, part.name);
+            });
+        };
+
+        const populateFormForEdit = async (part) => {
+            formTitle.textContent = `Edit Part: ${part.name}`;
+            partIdInput.value = part.id;
+            document.getElementById('part-name').value = part.name;
+            document.getElementById('part-number').value = part.part_number || '';
+            document.getElementById('part-description').value =
