@@ -14,6 +14,7 @@
         button:hover { background-color: #4c58b5; }
         button:disabled { background-color: #4a5568; cursor: not-allowed; }
         #logout-btn, .delete-btn { background-color: #c53030; }
+        #logout-btn:hover, .delete-btn:hover { background-color: #9b2c2c; }
         .edit-btn { background-color: #2c5282; margin-right: 5px;}
         #login-section, #admin-section { border: 1px solid #444; padding: 20px; margin-top: 20px; border-radius: 8px; background-color: #2d2d2d; }
         #admin-section { display: none; }
@@ -115,7 +116,7 @@
                 const row = partsTableBody.insertRow();
                 row.innerHTML = `
                     <td>${part.name}</td><td>${part.part_number || ''}</td>
-                    <td>${part.price || 'N/A'}</td><td>${part.stock_quantity}</td>
+                    <td>${part.price ? '$'+part.price.toFixed(2) : 'N/A'}</td><td>${part.stock_quantity}</td>
                     <td class="actions"><button class="edit-btn">Edit</button><button class="delete-btn">Delete</button></td>`;
                 row.querySelector('.edit-btn').onclick = () => populateFormForEdit(part);
                 row.querySelector('.delete-btn').onclick = () => deletePart(part.id, part.name);
@@ -127,4 +128,117 @@
             partIdInput.value = part.id;
             document.getElementById('part-name').value = part.name;
             document.getElementById('part-number').value = part.part_number || '';
-            document.getElementById('part-description').value =
+            document.getElementById('part-description').value = part.description || '';
+            document.getElementById('part-price').value = part.price || '';
+            document.getElementById('part-stock').value = part.stock_quantity;
+            squarespaceUrlInput.value = part.squarespace_product_url || '';
+            const { data: images } = await supabaseClient.from('part_images').select('image_url').eq('part_id', part.id).order('display_order');
+            currentImagesContainer.innerHTML = '';
+            if (images && images.length > 0) {
+                images.forEach(img => { currentImagesContainer.innerHTML += `<img src="${img.image_url}" alt="Current part image">`; });
+                currentImagesWrapper.style.display = 'block';
+            }
+            partImagesInput.required = false;
+            partImagesLabel.textContent = 'Upload New Images (optional, will replace all existing)';
+            submitBtn.textContent = 'Save Changes';
+            cancelEditBtn.style.display = 'block';
+            window.scrollTo(0, 0);
+        };
+
+        const resetForm = () => {
+            formTitle.textContent = 'Add New Part';
+            partForm.reset();
+            partIdInput.value = '';
+            partImagesInput.required = true;
+            partImagesLabel.textContent = 'Part Images (select one or more):';
+            submitBtn.textContent = 'Add Part';
+            cancelEditBtn.style.display = 'none';
+            currentImagesWrapper.style.display = 'none';
+            currentImagesContainer.innerHTML = '';
+        };
+
+        cancelEditBtn.onclick = resetForm;
+
+        const deletePart = async (id, name) => {
+            if (!confirm(`Are you sure you want to delete "${name}"? This is permanent.`)) return;
+            const { data: images } = await supabaseClient.from('part_images').select('image_url').eq('part_id', id);
+            const { error } = await supabaseClient.from('parts').delete().eq('id', id);
+            if (error) { alert('Error deleting part: ' + error.message); return; }
+            if (images && images.length > 0) {
+                const filePaths = images.map(img => new URL(img.image_url).pathname.split('/part-images/')[1]);
+                await supabaseClient.storage.from('part-images').remove(filePaths);
+            }
+            alert('Part deleted successfully.');
+            loadParts();
+        };
+
+        partForm.onsubmit = async (e) => {
+            e.preventDefault();
+            submitBtn.disabled = true;
+            const partId = partIdInput.value;
+            const imageFiles = partImagesInput.files;
+            const priceValue = document.getElementById('part-price').value;
+
+            const partData = {
+                name: document.getElementById('part-name').value,
+                part_number: document.getElementById('part-number').value,
+                description: document.getElementById('part-description').value,
+                price: priceValue ? parseFloat(priceValue) : null,
+                stock_quantity: parseInt(document.getElementById('part-stock').value),
+                squarespace_product_url: squarespaceUrlInput.value
+            };
+
+            if (partId) { // UPDATE
+                submitBtn.textContent = 'Saving...';
+                const { error: updateError } = await supabaseClient.from('parts').update(partData).eq('id', partId);
+                if (updateError) { alert('Error updating part: ' + updateError.message); submitBtn.disabled = false; return; }
+                if (imageFiles.length > 0) {
+                    const { data: oldImages } = await supabaseClient.from('part_images').select('image_url').eq('part_id', partId);
+                    await supabaseClient.from('part_images').delete().eq('part_id', partId);
+                    if (oldImages && oldImages.length > 0) {
+                        const filePaths = oldImages.map(img => new URL(img.image_url).pathname.split('/part-images/')[1]);
+                        await supabaseClient.storage.from('part-images').remove(filePaths);
+                    }
+                    const uploadPromises = Array.from(imageFiles).map(file => {
+                        const fileName = `${partId}/${Date.now()}-${file.name}`;
+                        return supabaseClient.storage.from('part-images').upload(fileName, file);
+                    });
+                    const uploadResults = await Promise.all(uploadPromises);
+                    const uploadError = uploadResults.find(r => r.error);
+                    if (uploadError) { alert('Error uploading new images: ' + uploadError.error.message); submitBtn.disabled = false; return; }
+                    const imageRecords = uploadResults.map((res, i) => ({
+                        part_id: partId,
+                        image_url: supabaseClient.storage.from('part-images').getPublicUrl(res.data.path).data.publicUrl,
+                        display_order: i
+                    }));
+                    await supabaseClient.from('part_images').insert(imageRecords);
+                }
+                alert('Part updated successfully!');
+                resetForm();
+            } else { // ADD
+                submitBtn.textContent = 'Uploading...';
+                if (imageFiles.length === 0) { alert('Please select at least one image.'); submitBtn.disabled = false; return; }
+                const { data: newPart, error: partError } = await supabaseClient.from('parts').insert(partData).select().single();
+                if (partError) { alert('Error saving part data: ' + partError.message); submitBtn.disabled = false; return; }
+                const uploadPromises = Array.from(imageFiles).map(file => {
+                    const fileName = `${newPart.id}/${Date.now()}-${file.name}`;
+                    return supabaseClient.storage.from('part-images').upload(fileName, file);
+                });
+                const uploadResults = await Promise.all(uploadPromises);
+                const uploadError = uploadResults.find(result => result.error);
+                if (uploadError) { alert('Error uploading images: ' + uploadError.error.message); submitBtn.disabled = false; return; }
+                const imageRecords = uploadResults.map((result, i) => ({
+                    part_id: newPart.id,
+                    image_url: supabaseClient.storage.from('part-images').getPublicUrl(result.data.path).data.publicUrl,
+                    display_order: i
+                }));
+                const { error: imageDbError } = await supabaseClient.from('part_images').insert(imageRecords);
+                if (imageDbError) { alert('Error saving image records: ' + imageDbError.message); } 
+                else { alert('Part added successfully!'); resetForm(); }
+            }
+            submitBtn.disabled = false;
+            loadParts();
+        };
+    </script>
+</body>
+</html>
